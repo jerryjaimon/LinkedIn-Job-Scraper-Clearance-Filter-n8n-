@@ -1,67 +1,130 @@
-# LinkedIn Job Scraper & Clearance Filter (n8n)
+# LinkedIn Job Scraper + AI Analysis (n8n + Notion)
 
-This project is an **n8n automation workflow** that scrapes publicly available LinkedIn job listings, filters roles based on **UK security clearance requirements**, and processes them using an LLM for structured analysis.
+This repository contains an **n8n automation workflow** that scrapes public LinkedIn job listings, applies configurable job filters, analyzes job descriptions using an LLM (Google Gemini), and stores structured results in a **user-owned Notion database**.
 
-It is designed for **research, job monitoring, and automation learning purposes**.
-
----
-
-## ✨ Features
-
-- Scrapes **public LinkedIn job listings** (no login required)
-- Extracts:
-  - Job title
-  - Company name
-  - Location
-  - Job description
-- Detects UK clearance keywords:
-  - BPSS
-  - SC
-  - DV
-  - CTC
-- Uses **Google Gemini (via n8n credentials)** for:
-  - Job summarisation
-  - Role relevance classification
-- Can be extended to:
-  - Telegram alerts
-  - Notion database storage
-  - CSV / Google Sheets export
+Each user must **duplicate the provided Notion database template** into their own workspace before running the workflow.
 
 ---
 
-## 🧠 Use Cases
+## 🧠 What This Workflow Does
 
-- Cybersecurity & defence job monitoring
-- Clearance-based role filtering
-- Automation & AI agent experimentation
-- Research on AI-assisted job intelligence
-
----
-
-## 🛠️ Requirements
-
-- **n8n** (self-hosted or cloud)
-- Google Gemini / PaLM API key
-- (Optional) Notion account
-- Internet access
+1. Scrapes **public LinkedIn job listings** (no login required)
+2. Applies **job filters** (role, location, keywords, exclusions)
+3. Extracts structured job data
+4. Prevents duplicates using Notion
+5. Uses AI to:
+   - Analyze job descriptions
+   - Detect UK clearance requirements (BPSS / SC / DV / CTC)
+   - Score relevance
+6. Stores results in Notion
+7. (Optional) Sends Telegram alerts
 
 ---
 
-## 🚀 Setup Instructions
+## 🗂️ Notion Database (REQUIRED)
 
-### 1. Install n8n
-Choose one:
-- n8n Cloud  
-- Docker  
-- Local install  
+### 🔹 Step 1: Duplicate the Database Template
 
-Docs: https://docs.n8n.io
+Use this template:
+
+🔗 https://striped-cuticle-169.notion.site/Common-Database-2e0d23ec37b98059aabfe5741714d5b1
+
+Steps:
+1. Open the link
+2. Click **Duplicate** (top-right)
+3. Select your own Notion workspace
+4. The database will now exist **inside your account**
+
+⚠️ Do NOT use the original database.  
+Each user must work with their **own duplicated copy**.
 
 ---
 
-### 2. Import the workflow
-1. Open n8n
-2. Click **Import**
-3. Upload: job_hunter.json
+### 🔹 Step 2: Create a Notion Integration
 
+1. Notion → **Settings → Connections → Develop or manage integrations**
+2. **+ New integration**
+3. Name it (e.g., `n8n Job Scraper`)
+4. Copy the **Internal Integration Token**
+5. Enable:
+   - Read
+   - Insert
+   - Update
+
+---
+
+### 🔹 Step 3: Share the Database with the Integration
+
+1. Open your duplicated database
+2. Click **••• → Connect to**
+3. Select your integration
+
+---
+
+### 🔹 Step 4: Get Your Database ID
+
+1. Open the duplicated database
+2. Copy the URL
+3. Extract the 32-character ID
+
+Example:
+
+---
+
+## 🔑 Required Credentials (n8n)
+
+### 1️⃣ Notion API
+- **Credentials → New → Notion API**
+- Paste integration token
+
+### 2️⃣ Google Gemini (PaLM)
+- Create PaLM / Gemini API key
+- **Credentials → New → Google PaLM API**
+
+### 3️⃣ Telegram (Optional)
+- Create bot via **@BotFather**
+- Store token as n8n credential
+
+---
+
+## 🧩 Nodes That MUST Be Configured
+
+| Node Name               | Required Configuration |
+|------------------------|------------------------|
+| Get Existing Jobs      | Notion credential + Database ID |
+| Get Unprocessed Jobs   | Notion credential + Database ID |
+| Add to Notion          | Notion credential + Database ID |
+| Update Notion          | Notion credential + Database ID |
+| Google Gemini Chat Model | Gemini credential |
+| Telegram Alert (optional) | Telegram credential |
+
+---
+
+## 🎯 Job Filters (IMPORTANT)
+
+The workflow supports **configurable job filters** to control which roles are scraped and processed.
+
+### 🔹 Where Filters Are Defined
+
+Filters are configured in **Set / Code nodes** near the start of the workflow (commonly named):
+
+- `Search Config1`
+
+
+---
+
+## 🔍 Available Job Filters
+
+### 1️⃣ Job Title / Role Keywords
+Used to define what roles to search for.
+
+Example values:
+```text
+return [
+  // 🇬🇧 United Kingdom
+  { json: { role: "Penetration Tester", location: "United Kingdom" } },
+  // 🇪🇺 Europe
+  { json: { role: "Penetration Tester", location: "Europe" } },
+ 
+];
 
