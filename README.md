@@ -67,7 +67,7 @@ Each user must work with their **own duplicated copy**.
 2. Copy the URL
 3. Extract the 32-character ID
 
-Example:
+Example:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ---
 
