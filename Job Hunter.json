@@ -1,0 +1,1446 @@
+{
+  "name": "Common Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "https://www.notion.so/2bdd23ec37b980",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -4192,
+        -720
+      ],
+      "id": "3da40981-9282-4036-9715-428a6a6f0492",
+      "name": "Get Existing Jobs1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// AGGREGATE INTO ONE LIST\nconst allItems = $input.all();\n\nconst idList = allItems.map(item => {\n  // Handle your specific Notion format\n  return (item.json.property_job_id || item.json.name || \"\").toString();\n}).filter(id => id !== \"\");\n// Output exactly 1 item\nreturn { json: { existing_ids: idList} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3968,
+        -720
+      ],
+      "id": "d6dfe464-1801-4c8a-abb7-c7382cd26853",
+      "name": "Flatten IDs1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -4416,
+        -576
+      ],
+      "id": "d12251a3-d365-401f-b37d-e0d13fc48a3e",
+      "name": "Loop Roles2"
+    },
+    {
+      "parameters": {
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "keywords",
+              "value": "={{ $('Loop Roles2').first().json.role}}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $('Loop Roles2').first().json.location}}"
+            },
+            {
+              "name": "f_TPR",
+              "value": "r86400"
+            },
+            {
+              "name": "sortBy",
+              "value": "DD"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -3744,
+        -720
+      ],
+      "id": "c504a25f-2004-461b-addc-3763e18ad1ca",
+      "name": "Search LinkedIn1"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "job_card_html",
+              "cssSelector": "li",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -3520,
+        -720
+      ],
+      "id": "d6df3362-eea3-473c-b71e-727e6e41c629",
+      "name": "Split HTML3"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "job_card_html",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -3296,
+        -720
+      ],
+      "id": "cd900ead-2986-4e14-aedc-c8fb0ad284e2",
+      "name": "Split Items3"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "dataPropertyName": "job_card_html",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "Title",
+              "cssSelector": "h3.base-search-card__title"
+            },
+            {
+              "key": "Company",
+              "cssSelector": "h4.base-search-card__subtitle"
+            },
+            {
+              "key": "Location",
+              "cssSelector": ".job-search-card__location"
+            },
+            {
+              "key": "Link",
+              "cssSelector": "a.base-card__full-link",
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "ID",
+              "cssSelector": "div.base-card",
+              "returnValue": "attribute",
+              "attribute": "data-entity-urn"
+            },
+            {
+              "key": "Date",
+              "cssSelector": "time",
+              "returnValue": "attribute",
+              "attribute": "datetime"
+            }
+          ]
+        },
+        "options": {
+          "trimValues": true
+        }
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -3072,
+        -720
+      ],
+      "id": "498a0367-4874-44ff-b130-591d4514406f",
+      "name": "Parse Data1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// CLEAN IDs FOR MERGE\nconst json = $input.item.json;\nconst cleanID = (json.ID || \"\").split(':').pop();\nconst cleanLink = (json.Link || \"\").split('?')[0] || \"https://linkedin.com/jobs\";\n\nreturn {\n  json: {\n    Job_ID: cleanID,\n    Title: json.Title,\n    Company: json.Company,\n    Location: json.Location,\n    Link: cleanLink,\n    Posted_Date: json.Date\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        -720
+      ],
+      "id": "19f6d336-530f-4ece-95f5-ac91ba041e7b",
+      "name": "Filter & Clean1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ⛔ FILTER DUPLICATES (FIXED FINAL LOGIC)\n// This code assumes the previous node ('Parse Basic Info' or 'Clean Data') outputs a stream of jobs.\n\nconst allScraped = $input.all();\n\n// 1. Retrieve the Blocklist from the node that ran at the start of the workflow.\nlet existingIds = [];\ntry {\n  // We try to access the data created by the 'Flatten IDs' node.\n  // The structure is assumed to be [{ json: { existing_ids: [...] } }]\n  const nodeData = $('Flatten IDs1').first() || $('Flatten IDs1').first();\n  existingIds = nodeData.json.existing_ids || [];\n} catch (e) { \n  // If the previous node (Flatten IDs) failed to run or is disconnected, treat the blocklist as empty.\n  existingIds = []; \n}\n\n// Ensure comparison is string-to-string\nexistingIds = existingIds.map(id => id.toString());\n\n// 2. Filter Logic\nconst uniqueJobs = allScraped.filter(item => {\n  // Use 'Job_ID' which is clean and available in the input stream\n  const jobId = (item.json.Job_ID || \"\").toString();\n  \n  // Only keep the item if the ID exists AND is NOT present in our existing list.\n  // This logic correctly skips jobs that were already added to Notion.\n  return jobId && jobId !== \"\" && !existingIds.includes(jobId);\n});\n\n// 3. Traffic Control (Prevents Loop Death)\n// If the list is empty (all jobs were duplicates), we output a dummy item so the loop can continue to the next search config.\nif (uniqueJobs.length === 0) {\n  return [{ json: { _isEmpty: true } }];\n}\n\nreturn uniqueJobs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2624,
+        -720
+      ],
+      "id": "fd169715-9c80-49a6-a2a9-975f746325fb",
+      "name": "Filter Duplicates1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json._isEmpty }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -2400,
+        -656
+      ],
+      "id": "91d0eb61-d2ad-4a89-b511-c2742026115c",
+      "name": "Is Empty?"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -4864,
+        -576
+      ],
+      "id": "7dd19b23-0fe4-4f8c-b0ce-397b49a7bc7f",
+      "name": "Every 4 Hours"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "2bdd23ec-37b9-808f-8150-c4ac821d4183",
+          "mode": "list",
+          "cachedResultName": "Jerry’s Job Hunter",
+          "cachedResultUrl": "https://www.notion.so/2bdd23ec37b9808f8150c4ac821d4183"
+        },
+        "returnAll": true,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Telegram Message Status|status",
+              "condition": "does_not_equal",
+              "statusValue": "Processed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -4448,
+        160
+      ],
+      "id": "72dbd900-501e-4851-9f43-2ec89c7b4dc5",
+      "name": "Get Unprocessed Jobs",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -4224,
+        160
+      ],
+      "id": "1932d977-4b0f-4323-a5d8-fc7f0be58781",
+      "name": "Loop Jobs"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -4000,
+        48
+      ],
+      "id": "e3a7ad39-a3e8-4fff-8aa2-4c4336dd343c",
+      "name": "Wait 10s",
+      "webhookId": "9d295b43-0d64-4fee-a5ad-aed1d40e5d59"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.property_link }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -3776,
+        -112
+      ],
+      "id": "88a6754c-385e-41b9-aa66-50e4be3e9612",
+      "name": "Fetch Details",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "description",
+              "cssSelector": ".description__text"
+            }
+          ]
+        },
+        "options": {
+          "trimValues": true
+        }
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -3552,
+        32
+      ],
+      "id": "95b02ea8-075a-435a-8cbb-62f7a6b3fe84",
+      "name": "Extract Description"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert Technical Recruiter specializing in the UK Cyber Security market. \nYour task is to analyze the Job Description (JD) and compare it against the Candidate Profile to extract data and calculate a match score.\n\n### INPUTS\n**JOB DESCRIPTION:** {{ $json.description }}\n\n**CANDIDATE PROFILE:** {{ $('Master Profile1').item.json }}\n\n### INSTRUCTIONS\n\n**1. Clearance Analysis (clearance_required):**\n   - Check if UK Security Clearance is EXPLICITLY required.\n   - Look for: \"SC\", \"Security Check\", \"DV\", \"Developed Vetting\", \"CTC\", \"BPSS\", \"NPPV\", \"Vetting\", \"Must be eligible for clearance\".\n   - Return `true` if found, otherwise `false`.\n\n**2. Contact Extraction (contact_info):**\n   - Find email addresses, phone numbers, or LinkedIn profile URLs of the recruiter/hiring manager.\n   - Ignore generic \"jobs@\" emails if possible.\n   - Return \"None\" if nothing is found.\n\n**3. Tech Summary (tech_summary):**\n   - Write a 150-200 word summary covering:\n     - **Stack:** Key tools (e.g., Burp Suite, Python) and platforms (AWS/Azure).\n     - **Requirements:** Certifications (OSCP, CRT), years of experience.\n     - **Role:** The core day-to-day mission.\n\n**4. Match Calculation (match_percentage):**\n   - Compare the JD requirements against the Candidate Profile.\n   - **Score (0-100):**\n     - **+40 points:** Core skills match (e.g., Pentesting, Burp Suite, Python).\n     - **+30 points:** Experience level alignment (Years of exp, Seniority). The candidate has 2 years of experience\n     - **+20 points:** Certifications match (CEH, CMPen vs OSCP/CRT requirements).\n     - **+10 points:** Industry/Domain fit.\n   - **Deduct 50 points** if the job requires a clearance (SC/DV) the candidate does NOT have (unless candidate is eligible).\n   - Return a single integer.\n\n### OUTPUT FORMAT\nReturn ONLY a single valid JSON object. Do not wrap in markdown code blocks.\n\n{\n  \"clearance_required\": boolean,\n  \"contact_info\": \"string\",\n  \"tech_summary\": \"string\",\n  \"match_percentage\": number\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -3328,
+        32
+      ],
+      "id": "3285acab-319f-49f0-9b60-1b6f24a156d4",
+      "name": "AI Analysis"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -3264,
+        256
+      ],
+      "id": "1b4fd6b3-4ff5-49a1-a493-96c7784f1663",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "L0n6JUSXu5I8BdAH",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// NODE 1: MASTER RESUME DATA\n// Updated Projects to use 'highlights' array for bullet points\nreturn [\n  {\n    json: {\n      \"basics\": {\n        \"label\": \"MSc Cyber Security Management at University of Warwick\",\n      \n        \"location\": {\n          \"countryCode\": \"UK\"\n        },\n        \"summary\": \"Offensive security professional with over 2 years of experience at KPMG delivering high-quality security assessments for web application, mobile, and API systems. Currently advancing expertise with an MSc in Cyber Security Management at the University of Warwick. Proven ability to identify critical vulnerabilities, collaborate with teams on remediation, and build security automation tools. Eager to apply penetration testing and Red Teaming expertise to enhance the defensive and detective capabilities of an internal security team.\"\n      },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4672,
+        160
+      ],
+      "id": "3888821c-c945-4bf5-a71c-e364eecc458e",
+      "name": "Master Profile1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PARSE AI OUTPUT & PREP FOR ACTIONS\nconst raw = $input.first().json.output || \"{}\";\nconst ai = JSON.parse(raw.replace(/```json/g, \"\").replace(/```/g, \"\").trim());\n\n// We assume the Job Data is passed through from the initial scrape\nconst job = $input.first().json.properties || $input.first().json;\n\n// Clean Company Name\nconst company = (job.Company || job.property_company || \"Unknown\").split('\\n')[0];\n\nreturn {\n  json: {\n    // Data for Notion Update\n    Notion_ID: job.id, // Needed for update operation\n    Match_Score: ai.match_percentage || 0,\n    Clearance: ai.clearance_required || false,\n    \n    // Data for Telegram Alert (Cleaned)\n    Title: job.Title || job.property_title,\n    Company: company,\n    Link: job.Link || job.property_link,\n    Summary: ai.tech_summary || \"No summary provided.\"\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2976,
+        32
+      ],
+      "id": "baeeb8cb-155b-4b9e-9825-010b398eaa0e",
+      "name": "Prep Final Data"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Loop Jobs').item.json.url }}"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Telegram Message Status|status",
+              "statusValue": "Processed"
+            },
+            {
+              "key": "Match Percentage|number",
+              "numberValue": "={{ $json.Clearance ? $json.Clearance : \"null\" }}"
+            },
+            {
+              "key": "Clearance|checkbox",
+              "checkboxValue": "={{ $json.Clearance ? $json.Clearance : \"null\" }}"
+            },
+            {
+              "key": "Job Description|rich_text",
+              "textContent": "={{ $json.Clearance ? $json.Clearance : \"null\" }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -2752,
+        32
+      ],
+      "id": "0a235e29-7c8c-4850-bbbd-6baa53b2e609",
+      "name": "Update Notion3",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{ID Here}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    \"chat_id\": \"{ADD CHAT ID HERE}\",\n    \"text\": `🚨 *New Job Found!*\n\n*${$json.property_title}*\n🏢 ${($json.property_company).split('\\n')[0]}\n📍 ${$json.property_location}\n📊 Match score: *${$json.property_match_percentage}%*${$json.property_clearance ? '\\n🛂 *Security Clearance Required*' : ''}\n\n🔗 [Apply Here](${ $json.property_link })`,\n    \"parse_mode\": \"Markdown\"\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -2528,
+        160
+      ],
+      "id": "155e3e20-0e62-4f7a-9bc4-09a2f821ecc9",
+      "name": "Telegram Alert1"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  // 🇬🇧 United Kingdom\n  { json: { role: \"Penetration Tester\", location: \"United Kingdom\" } },\n  // 🇪🇺 Europe\n  { json: { role: \"Penetration Tester\", location: \"Europe\" } },\n \n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4640,
+        -576
+      ],
+      "id": "39e225da-d602-425f-bc54-1e6e28fdedca",
+      "name": "Search Config2"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "",
+          "mode": "url"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Title|rich_text",
+              "textContent": "={{ $json.Title }}"
+            },
+            {
+              "key": "Job ID|title",
+              "title": "={{ $json.Job_ID }}"
+            },
+            {
+              "key": "Company|rich_text",
+              "textContent": "={{ $json.Company }}"
+            },
+            {
+              "key": "Location|rich_text",
+              "textContent": "={{ $json.Location }}"
+            },
+            {
+              "key": "Link|url",
+              "urlValue": "={{ $json.Link }}"
+            },
+            {
+              "key": "Posted Date|date",
+              "date": "={{ $json.Posted_Date }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -2176,
+        -576
+      ],
+      "id": "623bd2cf-1d7d-4932-8299-b9b649edb385",
+      "name": "Add to Notion1",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 60
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -4864,
+        1232
+      ],
+      "id": "d9930761-8ce6-4024-923c-61e4034f7e89",
+      "name": "Every Hour1"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.notion_url }}",
+          "mode": "url"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Telegram Message Status|status",
+              "statusValue": "Processed"
+            },
+            {
+              "key": "Job Description|rich_text",
+              "textContent": "={{ $json.snippet }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -3360,
+        1120
+      ],
+      "id": "8bad0a1d-a4a6-40dc-a973-8ea2adf934ee",
+      "name": "Update Notion: Processed",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{ID Here}",
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n  \"chat_id\": \"{YOUR CHAT ID HERE}}\",\n  \"text\": \"📝 *Job Scraped & Processed*\\n\\n*ID:* {{ $json.property_job_id }}\\n*Title:* {{ $json.property_title }}\\n*Company:* {{ $json.property_company.split('[')[0].trim() }}\\n*Location:* {{ $json.property_location }}\\n\\n*Snippet:*\\n{{ $json.property_job_description }}\\n\\n🔗 [View Job]({{ $json.property_link }})\",\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3168,
+        1120
+      ],
+      "id": "6bdaacb3-6501-4414-9904-a82b77026061",
+      "name": "Telegram: Success Alert",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Loop Jobs2').item.json.url }}"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Telegram Message Status|status",
+              "statusValue": "Failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -3472,
+        1328
+      ],
+      "id": "48705da3-b25a-4d6e-90c4-2bd7d7fab8b2",
+      "name": "Update Notion: Failed",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "2bdd23ec-37b9-808f-8150-c4ac821d4183",
+          "mode": "list"
+        },
+        "returnAll": true,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Telegram Message Status|status",
+              "condition": "equals",
+              "statusValue": "Not Processed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -4608,
+        1232
+      ],
+      "id": "c6ee3e6e-e55b-440f-b5c3-5dec6b990442",
+      "name": "Get Unprocessed Jobs2",
+      "credentials": {
+        "notionApi": {
+          "id": "BoQ2AULDTIGYoXpP",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -4384,
+        1104
+      ],
+      "id": "1b95effe-bdf9-45af-935c-61c7a9af087e",
+      "name": "Loop Jobs2"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.property_link }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -3952,
+        944
+      ],
+      "id": "81cafe0a-188c-407e-b91c-bb4ab2c44d59",
+      "name": "Fetch Details2",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "description",
+              "cssSelector": ".description__text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -3760,
+        1120
+      ],
+      "id": "b24cbdcc-8eaf-41a3-ae90-bd6e6ee0e4eb",
+      "name": "Extract Description2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Logic to get first 100 words and Job ID\nconst text = $json.description || \"No description found.\";\nconst words = text.split(/\\s+/);\nconst truncated = words.slice(0, 100).join(\" \") + \"...\";\nconst loopItem = $('Loop Jobs2').item.json;\n\nreturn {\n  job_id: loopItem.property_job_id,\n  title: loopItem.property_title,\n  company: (loopItem.property_company || \"\").split('\\n')[0],\n  link: loopItem.property_link,\n  location: loopItem.property_location,\n  snippet: truncated,\n  notion_url: loopItem.url\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3552,
+        1120
+      ],
+      "id": "74b60579-ecfc-437f-a6be-860cededcd77",
+      "name": "Truncate & Prep1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{ID Here}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"YOUR CHAT ID HERE\",\n  \"text\": \"⚠️ *Scraping Error Log*\\n\\n*Job ID:* {{ $json.property_job_id }} \\n\\n*Error:* HTTP Request Failed (Likely Bot Protection). Job marked as Processed (Failed).\",\n  \"parse_mode\": \"Markdown\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -3760,
+        1328
+      ],
+      "id": "29ef72f1-baf3-4aed-adcf-3a0ddfb728c3",
+      "name": "Telegram: Error Log1"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -4160,
+        1232
+      ],
+      "id": "6db74180-a041-4ad1-8538-c204abc38642",
+      "name": "Wait 10 secs",
+      "webhookId": "7b9b5bdd-be7b-4e07-8044-2366f2f70eeb"
+    },
+    {
+      "parameters": {
+        "content": "Use if you need AI, I have disabled it"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -5040,
+        144
+      ],
+      "id": "9de8df0e-5dd5-4c2f-a46c-55c4ebcbe6f8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Working node"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2928,
+        1200
+      ],
+      "id": "e412bd23-dc1c-48bf-86f4-46f80a7b0d31",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "Working node"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1872,
+        -624
+      ],
+      "id": "c5fad2ac-7d0b-42bc-becd-465d64ed1b26",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "Add your notion database. Duplicate the one from github readme\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4224,
+        -928
+      ],
+      "id": "27cdae6c-489d-4350-a400-22da859bc4a9",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Change search Query\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4672,
+        -768
+      ],
+      "id": "e1c77204-f6ca-4227-873f-7f1f9aa820af",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "Run the node and configure this\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        -768
+      ],
+      "id": "d2492016-5b17-43e5-8230-38b803fbe400",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "Run the notion node again\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4672,
+        944
+      ],
+      "id": "856c416d-5c67-46aa-80bb-3a45a2a55b2b",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "content": "Change CHATID\nTo get your chatid:\n\nSearch for @RawDataBot or @getidsbot in Telegram, start the chat, and send any message; the bot will reply with your ID.",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3200,
+        944
+      ],
+      "id": "5674ac6a-5a5c-4360-8142-32bf1b36ac28",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "Change CHATID\nTo get your chatid:\n\nSearch for @RawDataBot or @getidsbot in Telegram, start the chat, and send any message; the bot will reply with your ID.",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3808,
+        1536
+      ],
+      "id": "4ea203c1-a4aa-4ec3-86d8-89184f3601c3",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "Run the notion node again\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3472,
+        928
+      ],
+      "id": "484bd7d2-33a2-4038-b12a-855470be207c",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "content": "Run the notion node again\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3280,
+        1408
+      ],
+      "id": "4b159024-79ed-4a03-851d-f9014f437f96",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "content": "Add your token key if you want to use this\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3328,
+        -160
+      ],
+      "id": "71f27099-199d-4b8a-bf29-03b66ba47e40",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "content": "Add resume here\n",
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -4720,
+        -32
+      ],
+      "id": "3cf191a8-a034-4eef-ad79-caf8244bcd3d",
+      "name": "Sticky Note12"
+    },
+    {
+      "parameters": {
+        "content": "For all telegram nodes: create using botFather and then use it.\nYou might have to send a Hi message to the bot you created\n",
+        "height": 208,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3200,
+        704
+      ],
+      "id": "e93039bb-6427-42c9-83fb-f0bee92e2570",
+      "name": "Sticky Note13"
+    },
+    {
+      "parameters": {
+        "content": "For all telegram nodes: create using botFather and then use it.\nYou might have to send a Hi message to the bot you created\n",
+        "height": 208,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3808,
+        1712
+      ],
+      "id": "cb132e25-0b19-4659-bb29-2a2aea377fd2",
+      "name": "Sticky Note14"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Existing Jobs1": {
+      "main": [
+        [
+          {
+            "node": "Flatten IDs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten IDs1": {
+      "main": [
+        [
+          {
+            "node": "Search LinkedIn1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Roles2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get Existing Jobs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search LinkedIn1": {
+      "main": [
+        [
+          {
+            "node": "Split HTML3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split HTML3": {
+      "main": [
+        [
+          {
+            "node": "Split Items3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Items3": {
+      "main": [
+        [
+          {
+            "node": "Parse Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Data1": {
+      "main": [
+        [
+          {
+            "node": "Filter & Clean1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Clean1": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicates1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates1": {
+      "main": [
+        [
+          {
+            "node": "Is Empty?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Empty?": {
+      "main": [
+        [
+          {
+            "node": "Loop Roles2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add to Notion1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 4 Hours": {
+      "main": [
+        [
+          {
+            "node": "Search Config2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Jobs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait 10s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 10s": {
+      "main": [
+        [
+          {
+            "node": "Fetch Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Details": {
+      "main": [
+        [
+          {
+            "node": "Extract Description",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Extract Description": {
+      "main": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          {
+            "node": "Prep Final Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Analysis",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Master Profile1": {
+      "main": [
+        [
+          {
+            "node": "Get Unprocessed Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Final Data": {
+      "main": [
+        [
+          {
+            "node": "Update Notion3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Notion3": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Alert1": {
+      "main": [
+        [
+          {
+            "node": "Loop Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unprocessed Jobs": {
+      "main": [
+        [
+          {
+            "node": "Loop Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Config2": {
+      "main": [
+        [
+          {
+            "node": "Loop Roles2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Notion1": {
+      "main": [
+        [
+          {
+            "node": "Loop Roles2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Hour1": {
+      "main": [
+        [
+          {
+            "node": "Get Unprocessed Jobs2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unprocessed Jobs2": {
+      "main": [
+        [
+          {
+            "node": "Loop Jobs2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Jobs2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait 10 secs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Details2": {
+      "main": [
+        [
+          {
+            "node": "Extract Description2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: Error Log1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Notion: Failed": {
+      "main": [
+        [
+          {
+            "node": "Loop Jobs2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Success Alert": {
+      "main": [
+        [
+          {
+            "node": "Loop Jobs2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 10 secs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Details2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Truncate & Prep1": {
+      "main": [
+        [
+          {
+            "node": "Update Notion: Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Notion: Processed": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Success Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: Error Log1": {
+      "main": [
+        [
+          {
+            "node": "Update Notion: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Description2": {
+      "main": [
+        [
+          {
+            "node": "Truncate & Prep1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bc6b37cb-ad57-43c9-8dc0-2d34a044e112",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6fc226027e1bd685897cfe261d798149c4989ad9d81d02d1f27fba30e5466b55"
+  },
+  "id": "9ZxRF7lnQhJSZaHf",
+  "tags": []
+}
